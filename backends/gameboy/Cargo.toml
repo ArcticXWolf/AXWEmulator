@@ -1,0 +1,9 @@
+[package]
+name = "axwemulator-backends-gameboy"
+version = "0.1.0"
+authors = ["ArcticXWolf"]
+edition = "2024"
+include = ["**/*.rs", "Cargo.toml"]
+rust-version = "1.85"
+
+[dependencies]
