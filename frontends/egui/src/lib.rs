@@ -1,4 +1,4 @@
 #![warn(clippy::all, rust_2018_idioms)]
 
-mod app;
-pub use app::EmulatorFrontend;
+pub mod utils;
+pub mod views;

@@ -21,9 +21,12 @@ struct SimpleCpu {
 }
 
 impl Steppable for SimpleCpu {
-    fn step(&mut self, _backend: &Backend) -> Result<Duration, Error> {
+    fn step(&mut self, backend: &Backend) -> Result<Duration, Error> {
         self.counter += 1;
-        self.text_sender.add(format!("Counter: {}", self.counter));
+        self.text_sender.add(
+            backend.get_current_clock(),
+            format!("Counter: {}", self.counter),
+        );
 
         let frame = Frame {
             width: 100,
@@ -36,7 +39,7 @@ impl Steppable for SimpleCpu {
             ); 100 * 100]
                 .to_vec(),
         };
-        self.frame_sender.add(frame);
+        self.frame_sender.add(backend.get_current_clock(), frame);
 
         Ok(Duration::from_millis(20))
     }

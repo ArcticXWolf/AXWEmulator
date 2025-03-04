@@ -3,8 +3,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use femtos::Instant;
+
 #[derive(Clone, Default)]
-pub struct Ringbuffer<T>(Arc<Mutex<VecDeque<T>>>, usize);
+pub struct Ringbuffer<T>(Arc<Mutex<VecDeque<(Instant, T)>>>, usize);
 
 impl<T: Clone> Ringbuffer<T> {
     pub fn new(capacity: usize) -> Self {
@@ -14,19 +16,19 @@ impl<T: Clone> Ringbuffer<T> {
         )
     }
 
-    pub fn push_back(&self, value: T) {
+    pub fn push_back(&self, clock: Instant, value: T) {
         let mut queue = self.0.lock().unwrap();
         if queue.len() >= self.1 {
             queue.pop_front();
         }
-        queue.push_back(value);
+        queue.push_back((clock, value));
     }
 
-    pub fn pop_front(&self) -> Option<T> {
+    pub fn pop_front(&self) -> Option<(Instant, T)> {
         self.0.lock().unwrap().pop_front()
     }
 
-    pub fn drain_and_pop_latest(&self) -> Option<T> {
+    pub fn drain_and_pop_latest(&self) -> Option<(Instant, T)> {
         self.0.lock().unwrap().drain(..).last()
     }
 

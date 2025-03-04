@@ -1,3 +1,5 @@
+use femtos::Instant;
+
 use crate::utils::Ringbuffer;
 
 pub type Pixel = (u8, u8, u8, u8);
@@ -38,8 +40,8 @@ pub struct FrameSender {
 }
 
 impl FrameSender {
-    pub fn add(&self, frame: Frame) {
-        self.queue.push_back(frame);
+    pub fn add(&self, clock: Instant, frame: Frame) {
+        self.queue.push_back(clock, frame);
     }
 }
 
@@ -53,7 +55,7 @@ impl FrameReceiver {
         self.max_size
     }
 
-    pub fn latest(&self) -> Option<Frame> {
+    pub fn latest(&self) -> Option<(Instant, Frame)> {
         self.queue.drain_and_pop_latest()
     }
 }

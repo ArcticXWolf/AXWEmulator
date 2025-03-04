@@ -6,9 +6,17 @@ use axwemulator_core::{
         component::{Addressable, MemoryAddress, Steppable, Transmutable},
     },
     error::Error,
-    frontend::graphics::{Frame, FrameSender},
+    frontend::{
+        graphics::{Frame, FrameSender},
+        input::{ButtonState, InputEvent, InputReceiver},
+    },
 };
 use femtos::Duration;
+
+use crate::{
+    DT_TIMER, FONT_BASE, ST_TIMER,
+    input::{InputButton, KeypadState},
+};
 
 pub const CLOCK_SPEED_NS: u64 = 1_000_000_000 / 700;
 pub const FRAME_DIMENSIONS: (usize, usize) = (64, 32);
@@ -16,16 +24,20 @@ pub const FRAME_DIMENSIONS: (usize, usize) = (64, 32);
 pub struct CpuState {
     v: [u8; 16],
     i: u16,
-    dt: u8,
-    st: u8,
     pc: u16,
     sp: u8,
     stack: [u16; 16],
     paused: bool,
-    quirks_load: bool,
+    waiting_for_key: Option<usize>,
     quirks_shift: bool,
+    quirks_memory_i_incremented: bool,
+    quirks_memory_i_incremented_one_less: bool,
+    // quirks_wrap: bool,
     quirks_jump: bool,
+    // quirks_vblank: bool,
+    quirks_logic: bool,
     frame_buffer: [bool; FRAME_DIMENSIONS.0 * FRAME_DIMENSIONS.1],
+    keypad_state: KeypadState,
 }
 
 impl Default for CpuState {
@@ -33,16 +45,20 @@ impl Default for CpuState {
         Self {
             v: Default::default(),
             i: Default::default(),
-            dt: Default::default(),
-            st: Default::default(),
             pc: Default::default(),
             sp: Default::default(),
             stack: Default::default(),
-            paused: false,
-            quirks_load: Default::default(),
+            paused: Default::default(),
+            waiting_for_key: Default::default(),
             quirks_shift: Default::default(),
+            quirks_memory_i_incremented: Default::default(),
+            quirks_memory_i_incremented_one_less: Default::default(),
+            // quirks_wrap: Default::default(),
             quirks_jump: Default::default(),
+            // quirks_vblank: Default::default(),
+            quirks_logic: Default::default(),
             frame_buffer: [false; FRAME_DIMENSIONS.0 * FRAME_DIMENSIONS.1],
+            keypad_state: KeypadState::new(),
         }
     }
 }
@@ -60,17 +76,37 @@ impl CpuState {
 pub struct Cpu {
     state: CpuState,
     frame_sender: Option<FrameSender>,
+    input_reciever: Option<InputReceiver>,
 }
 
 impl Cpu {
-    pub fn new(frame_sender: FrameSender) -> Self {
+    pub fn new(frame_sender: FrameSender, input_reciever: InputReceiver) -> Self {
         Self {
             state: CpuState::new(),
             frame_sender: Some(frame_sender),
+            input_reciever: Some(input_reciever),
         }
     }
 
-    fn send_frame(&self) {
+    fn handle_input(&mut self) {
+        if let Some(ie) = self.input_reciever.as_ref().unwrap().pop() {
+            self.state.keypad_state.parse_input_event(ie);
+
+            if let Some(x) = self.state.waiting_for_key {
+                match ie {
+                    InputEvent::Keyboard(keyboard_event_key, ButtonState::Released) => {
+                        if let Ok(button) = InputButton::try_from(keyboard_event_key) {
+                            self.state.v[x] = button.into();
+                            self.state.waiting_for_key = None;
+                        }
+                    }
+                    _ => (),
+                }
+            }
+        }
+    }
+
+    fn send_frame(&self, backend: &Backend) {
         if self.frame_sender.is_none() {
             return;
         }
@@ -86,13 +122,18 @@ impl Cpu {
             }
         }
 
-        self.frame_sender.as_ref().unwrap().add(frame);
+        self.frame_sender
+            .as_ref()
+            .unwrap()
+            .add(backend.get_current_clock(), frame);
     }
 }
 
 impl Steppable for Cpu {
     fn step(&mut self, backend: &Backend) -> Result<Duration, Error> {
-        if !self.state.paused {
+        self.handle_input();
+
+        if !self.state.paused && self.state.waiting_for_key.is_none() {
             // fetch
             let opcode = backend
                 .get_bus()
@@ -317,7 +358,7 @@ impl Instruction {
             }
             Instruction::Cls => {
                 cpu.state.frame_buffer = [false; FRAME_DIMENSIONS.0 * FRAME_DIMENSIONS.1];
-                cpu.send_frame();
+                cpu.send_frame(backend);
                 Ok(())
             }
             Instruction::Return => {
@@ -335,16 +376,113 @@ impl Instruction {
                 cpu.state.pc = *address as u16;
                 Ok(())
             }
+            Instruction::SkipIfVImmediate(x, y) => {
+                if cpu.state.v[*x] == *y {
+                    cpu.state.pc += 2;
+                }
+                Ok(())
+            }
+            Instruction::SkipIfNotVImmediate(x, y) => {
+                if cpu.state.v[*x] != *y {
+                    cpu.state.pc += 2;
+                }
+                Ok(())
+            }
+            Instruction::SkipIfCmp(x, y) => {
+                if cpu.state.v[*x] == cpu.state.v[*y] {
+                    cpu.state.pc += 2;
+                }
+                Ok(())
+            }
             Instruction::LoadVImmediate(v, value) => {
                 cpu.state.v[*v] = *value;
                 Ok(())
             }
             Instruction::AddVImmediate(v, value) => {
-                cpu.state.v[*v] += *value;
+                cpu.state.v[*v] = cpu.state.v[*v].wrapping_add(*value);
+                Ok(())
+            }
+            Instruction::LoadV(x, y) => {
+                cpu.state.v[*x] = cpu.state.v[*y];
+                Ok(())
+            }
+            Instruction::Or(x, y) => {
+                cpu.state.v[*x] |= cpu.state.v[*y];
+                if cpu.state.quirks_logic {
+                    cpu.state.v[0xF] = 0;
+                }
+                Ok(())
+            }
+            Instruction::And(x, y) => {
+                cpu.state.v[*x] &= cpu.state.v[*y];
+                if cpu.state.quirks_logic {
+                    cpu.state.v[0xF] = 0;
+                }
+                Ok(())
+            }
+            Instruction::Xor(x, y) => {
+                cpu.state.v[*x] ^= cpu.state.v[*y];
+                if cpu.state.quirks_logic {
+                    cpu.state.v[0xF] = 0;
+                }
+                Ok(())
+            }
+            Instruction::Add(x, y) => {
+                let (result, overflow) = cpu.state.v[*x].overflowing_add(cpu.state.v[*y]);
+                cpu.state.v[*x] = result;
+                cpu.state.v[0xF] = if overflow { 1 } else { 0 };
+                Ok(())
+            }
+            Instruction::Sub(x, y) => {
+                let (result, overflow) = cpu.state.v[*x].overflowing_sub(cpu.state.v[*y]);
+                cpu.state.v[*x] = result;
+                cpu.state.v[0xF] = if overflow { 0 } else { 1 };
+                Ok(())
+            }
+            Instruction::ShiftRight(x, y) => {
+                if !cpu.state.quirks_shift {
+                    cpu.state.v[*x] = cpu.state.v[*y];
+                }
+                cpu.state.v[0xF] = cpu.state.v[*x] & 0b1;
+                cpu.state.v[*x] >>= 1;
+                Ok(())
+            }
+            Instruction::SubN(x, y) => {
+                let (result, overflow) = cpu.state.v[*y].overflowing_sub(cpu.state.v[*x]);
+                cpu.state.v[*x] = result;
+                cpu.state.v[0xF] = if overflow { 0 } else { 1 };
+                Ok(())
+            }
+            Instruction::ShiftLeft(x, y) => {
+                if !cpu.state.quirks_shift {
+                    cpu.state.v[*x] = cpu.state.v[*y];
+                }
+                cpu.state.v[0xF] = cpu.state.v[*x] & 0b10000000;
+                cpu.state.v[*x] <<= 1;
+                Ok(())
+            }
+            Instruction::SkipIfNotCmp(x, y) => {
+                if cpu.state.v[*x] != cpu.state.v[*y] {
+                    cpu.state.pc += 2;
+                }
                 Ok(())
             }
             Instruction::LoadIImmediate(address) => {
                 cpu.state.i = *address as u16;
+                Ok(())
+            }
+            Instruction::JumpV0(x) => {
+                if cpu.state.quirks_jump {
+                    let register = *x & 0xF00;
+                    cpu.state.pc = (cpu.state.v[register] as u16).wrapping_add(*x as u16);
+                } else {
+                    cpu.state.pc = (cpu.state.v[0x0] as u16).wrapping_add(*x as u16);
+                }
+                Ok(())
+            }
+            Instruction::Random(x, y) => {
+                let random: u8 = rand::random();
+                cpu.state.v[*x] = random & *y;
                 Ok(())
             }
             Instruction::Draw(vx, vy, n) => {
@@ -376,7 +514,94 @@ impl Instruction {
                         }
                     }
                 }
-                cpu.send_frame();
+                cpu.send_frame(backend);
+                Ok(())
+            }
+            Instruction::SkipIfKey(x) => {
+                if cpu
+                    .state
+                    .keypad_state
+                    .get_state_for_button((*x as u8).try_into().unwrap())
+                    == ButtonState::Pressed
+                {
+                    cpu.state.pc += 2;
+                };
+                Ok(())
+            }
+            Instruction::SkipIfNotKey(x) => {
+                if cpu
+                    .state
+                    .keypad_state
+                    .get_state_for_button((*x as u8).try_into().unwrap())
+                    == ButtonState::Released
+                {
+                    cpu.state.pc += 2;
+                };
+                Ok(())
+            }
+            Instruction::LoadVDT(x) => {
+                cpu.state.v[*x] = backend.get_bus().read_u8(DT_TIMER)?;
+                Ok(())
+            }
+            Instruction::WaitAndLoadKeypress(x) => {
+                // just set wait for key and return. the rest is handled in the step function
+                cpu.state.waiting_for_key = Some(*x);
+                Ok(())
+            }
+            Instruction::LoadDTV(x) => {
+                backend.get_bus().write_u8(DT_TIMER, cpu.state.v[*x])?;
+                Ok(())
+            }
+            Instruction::LoadSTV(x) => {
+                backend.get_bus().write_u8(ST_TIMER, cpu.state.v[*x])?;
+                Ok(())
+            }
+            Instruction::AddIV(x) => {
+                cpu.state.i = cpu.state.i.wrapping_add(cpu.state.v[*x] as u16);
+                Ok(())
+            }
+            Instruction::LoadFontV(x) => {
+                cpu.state.i = FONT_BASE as u16 + (*x as u16) * 5;
+                Ok(())
+            }
+            Instruction::StoreBCDV(x) => {
+                let hundreds = (cpu.state.v[*x] / 100) % 10;
+                let tens = (cpu.state.v[*x] / 10) % 10;
+                let ones = cpu.state.v[*x] % 10;
+                backend.get_bus().write_u8(cpu.state.i as usize, hundreds)?;
+                backend
+                    .get_bus()
+                    .write_u8((cpu.state.i + 1) as usize, tens)?;
+                backend
+                    .get_bus()
+                    .write_u8((cpu.state.i + 2) as usize, ones)?;
+                Ok(())
+            }
+            Instruction::StoreAllV(x) => {
+                for register in 0..*x {
+                    backend
+                        .get_bus()
+                        .write_u8(cpu.state.i as usize + register, cpu.state.v[register])?;
+                }
+                if !cpu.state.quirks_memory_i_incremented {
+                    cpu.state.i += *x as u16;
+                    if !cpu.state.quirks_memory_i_incremented_one_less {
+                        cpu.state.i += 1;
+                    }
+                }
+                Ok(())
+            }
+            Instruction::LoadAllV(x) => {
+                for register in 0..*x {
+                    cpu.state.v[register] =
+                        backend.get_bus().read_u8(cpu.state.i as usize + register)?;
+                }
+                if !cpu.state.quirks_memory_i_incremented {
+                    cpu.state.i += *x as u16;
+                    if !cpu.state.quirks_memory_i_incremented_one_less {
+                        cpu.state.i += 1;
+                    }
+                }
                 Ok(())
             }
             Instruction::Unknown(op) => Err(Error::Emulator(

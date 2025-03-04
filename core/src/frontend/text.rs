@@ -1,3 +1,5 @@
+use femtos::Instant;
+
 use crate::utils::Ringbuffer;
 
 pub struct TextSender {
@@ -5,8 +7,8 @@ pub struct TextSender {
 }
 
 impl TextSender {
-    pub fn add(&self, msg: String) {
-        self.queue.push_back(msg);
+    pub fn add(&self, clock: Instant, msg: String) {
+        self.queue.push_back(clock, msg);
     }
 }
 
@@ -15,10 +17,10 @@ pub struct TextReceiver {
 }
 
 impl TextReceiver {
-    pub fn pop(&self) -> Option<String> {
+    pub fn pop(&self) -> Option<(Instant, String)> {
         self.queue.pop_front()
     }
-    pub fn latest(&self) -> Option<String> {
+    pub fn latest(&self) -> Option<(Instant, String)> {
         self.queue.drain_and_pop_latest()
     }
     pub fn is_empty(&self) -> bool {

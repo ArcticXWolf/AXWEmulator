@@ -4,6 +4,7 @@ use std::fmt;
 pub enum FrontendError<E> {
     TextNotSupported,
     GraphicsNotSupported,
+    InputNotSupported,
     #[from(E)]
     Specific(E),
 }
@@ -17,6 +18,9 @@ where
             FrontendError::TextNotSupported => write!(f, "This frontend doesn't support text"),
             FrontendError::GraphicsNotSupported => {
                 write!(f, "This frontend doesn't support graphics")
+            }
+            FrontendError::InputNotSupported => {
+                write!(f, "This frontend doesn't support input")
             }
             FrontendError::Specific(err) => write!(f, "{}", err),
         }

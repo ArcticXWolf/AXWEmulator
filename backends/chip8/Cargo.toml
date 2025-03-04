@@ -9,3 +9,5 @@ rust-version = "1.85"
 [dependencies]
 axwemulator-core = {path="../../core"}
 femtos = "0.1.1"
+rand = "0.9.0"
+getrandom = { version = "0.3", features = ["wasm_js"] }

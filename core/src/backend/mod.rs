@@ -43,6 +43,10 @@ impl Backend {
             .ok_or_else(|| Error::new(format!("no component named {}", name)))
     }
 
+    pub fn get_current_clock(&self) -> Instant {
+        self.clock
+    }
+
     pub fn add_addressable_component(
         &mut self,
         name: &str,
