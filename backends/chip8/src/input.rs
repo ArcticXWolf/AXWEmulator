@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use axwemulator_core::frontend::input::{ButtonState, InputEvent, KeyboardEventKey};
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum InputButton {
     Button0,
     Button1,
@@ -103,7 +103,6 @@ impl KeypadState {
     }
 
     pub fn parse_input_event(&mut self, event: InputEvent) {
-        println!("Parsing input {:?}", event);
         match event {
             InputEvent::Keyboard(keyboard_event_key, button_state) => {
                 if let Ok(button) = InputButton::try_from(keyboard_event_key) {

@@ -89,7 +89,7 @@ impl Cpu {
     }
 
     fn handle_input(&mut self) {
-        if let Some(ie) = self.input_reciever.as_ref().unwrap().pop() {
+        while let Some(ie) = self.input_reciever.as_ref().unwrap().pop() {
             self.state.keypad_state.parse_input_event(ie);
 
             if let Some(x) = self.state.waiting_for_key {
@@ -521,7 +521,7 @@ impl Instruction {
                 if cpu
                     .state
                     .keypad_state
-                    .get_state_for_button((*x as u8).try_into().unwrap())
+                    .get_state_for_button(cpu.state.v[*x].try_into().unwrap())
                     == ButtonState::Pressed
                 {
                     cpu.state.pc += 2;
@@ -532,7 +532,7 @@ impl Instruction {
                 if cpu
                     .state
                     .keypad_state
-                    .get_state_for_button((*x as u8).try_into().unwrap())
+                    .get_state_for_button(cpu.state.v[*x].try_into().unwrap())
                     == ButtonState::Released
                 {
                     cpu.state.pc += 2;
@@ -578,7 +578,7 @@ impl Instruction {
                 Ok(())
             }
             Instruction::StoreAllV(x) => {
-                for register in 0..*x {
+                for register in 0..=*x {
                     backend
                         .get_bus()
                         .write_u8(cpu.state.i as usize + register, cpu.state.v[register])?;
@@ -592,7 +592,7 @@ impl Instruction {
                 Ok(())
             }
             Instruction::LoadAllV(x) => {
-                for register in 0..*x {
+                for register in 0..=*x {
                     cpu.state.v[register] =
                         backend.get_bus().read_u8(cpu.state.i as usize + register)?;
                 }
