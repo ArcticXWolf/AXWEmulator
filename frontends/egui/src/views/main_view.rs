@@ -2,7 +2,7 @@ use std::sync::mpsc;
 
 use web_time::Instant;
 
-use axwemulator_backends_chip8::{Chip8Options, create_chip8_backend};
+use axwemulator_backends_chip8::{Chip8Options, Platform, create_chip8_backend};
 use axwemulator_backends_simple::create_simple_backend;
 use axwemulator_core::{
     backend::Backend,
@@ -32,14 +32,19 @@ impl BackendState {
             AvailableBackends::Simple => {
                 create_simple_backend(frontend).expect("could not create backend")
             }
-            AvailableBackends::Chip8 => {
+            AvailableBackends::Chip8 | AvailableBackends::SuperChip => {
                 let rom_data = if let Some(data) = frontend.main_state.rom.clone() {
                     data
                 } else {
                     include_bytes!("../../../../roms/chip8/programs/IBM Logo.ch8").to_vec()
                 };
+                let platform = match backend_choice {
+                    AvailableBackends::Chip8 => Platform::Chip8,
+                    AvailableBackends::SuperChip => Platform::SuperChip,
+                    _ => unreachable!(),
+                };
 
-                create_chip8_backend(frontend, Chip8Options { rom_data })
+                create_chip8_backend(frontend, Chip8Options { platform, rom_data })
                     .expect("could not create backend")
             }
         };
@@ -51,7 +56,10 @@ impl BackendState {
 
     pub fn update(&mut self) {
         let elapsed = self.backend_last_update.elapsed();
-        let _ = self.backend.run_for(elapsed.into());
+        let result = self.backend.run_for(elapsed.into());
+        if let Err(error) = result {
+            panic!("{}", error);
+        }
         self.backend_last_update = Instant::now();
     }
 }
@@ -85,9 +93,10 @@ impl FrameState {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 pub enum AvailableBackends {
-    #[default]
     Simple,
+    #[default]
     Chip8,
+    SuperChip,
 }
 
 #[derive(Debug)]
@@ -172,6 +181,11 @@ impl MainView {
                             &mut self.main_state.combobox_backend_selection,
                             AvailableBackends::Chip8,
                             "Chip8",
+                        );
+                        ui.selectable_value(
+                            &mut self.main_state.combobox_backend_selection,
+                            AvailableBackends::SuperChip,
+                            "SuperChip",
                         );
                     });
                 if ui.button("Select rom").clicked() {

@@ -40,8 +40,14 @@ const FONT_SET: [u8; 80]  = [
     0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 ];
 
+pub enum Platform {
+    Chip8,
+    SuperChip,
+}
+
 pub struct Chip8Options {
     pub rom_data: Vec<u8>,
+    pub platform: Platform,
 }
 
 pub fn create_chip8_backend<F: Frontend>(
@@ -65,7 +71,7 @@ pub fn create_chip8_backend<F: Frontend>(
     let timer = Timer::new();
     backend.add_component("timer", Component::new(timer));
 
-    let cpu = Cpu::new(frame_sender, input_reciever);
+    let cpu = Cpu::new(options.platform, frame_sender, input_reciever);
     backend.add_component("cpu", Component::new(cpu));
     frontend.register_input_sender(input_sender)?;
     frontend.register_graphics_reciever(frame_reciever)?;
