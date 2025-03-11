@@ -1,5 +1,9 @@
 use std::sync::mpsc;
 
+use cpal::{
+    FromSample, Sample, SizedSample, Stream, StreamError,
+    traits::{DeviceTrait, HostTrait, StreamTrait},
+};
 use web_time::Instant;
 
 use axwemulator_backends_chip8::{Chip8Options, Platform, create_chip8_backend};
@@ -19,7 +23,7 @@ use egui::{ColorImage, Event, TextureHandle, TextureOptions};
 
 use crate::utils;
 
-use super::textlog_view::TextlogView;
+use super::{memory_view::MemoryView, textlog_view::TextlogView};
 
 pub struct BackendState {
     backend: Backend,
@@ -118,15 +122,20 @@ pub struct MainView {
     input_sender: Option<InputSender>,
     view_command_reciever: mpsc::Receiver<ViewCommand>,
     view_command_sender: mpsc::Sender<ViewCommand>,
+    stream: Option<Stream>,
 }
 
 impl eframe::App for MainView {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.update_main(ctx);
-        self.sub_views.update(ctx);
+        if let Some(backend_state) = self.backend_state.as_ref() {
+            self.sub_views.update(&backend_state.backend, ctx);
+        }
 
+        if let Some(backend_state) = self.backend_state.as_ref() {
+            self.sub_views.draw(&backend_state.backend, ctx);
+        }
         self.draw_main(ctx);
-        self.sub_views.draw(ctx);
 
         ctx.request_repaint();
     }
@@ -144,6 +153,7 @@ impl MainView {
             input_sender: Default::default(),
             view_command_reciever: reciever,
             view_command_sender: sender,
+            stream: Default::default(),
         }
     }
 
@@ -213,6 +223,19 @@ impl MainView {
                     ui.label("Rom loaded.");
                 }
 
+                if let Some(stream) = self.stream.as_ref() {
+                    if ui.button("Play").clicked() {
+                        stream.play();
+                    }
+                    if ui.button("Pause").clicked() {
+                        stream.pause();
+                    }
+                } else {
+                    if ui.button("Setup Audio").clicked() {
+                        self.setup_audio();
+                    }
+                }
+
                 if ui.button("Load emulator backend").clicked() {
                     self.start_new_backend(self.main_state.combobox_backend_selection, ctx);
                 }
@@ -225,6 +248,7 @@ impl MainView {
     }
 
     pub fn start_new_backend(&mut self, selected_backend: AvailableBackends, ctx: &egui::Context) {
+        self.sub_views = SubViews::new();
         self.backend_state = Some(BackendState::new(selected_backend, self));
     }
 
@@ -261,6 +285,69 @@ impl MainView {
             }
         });
     }
+
+    pub fn setup_audio(&mut self) {
+        let host = cpal::default_host();
+        let device = host.default_output_device().expect("no output available");
+        let config = device.default_output_config().unwrap();
+        println!("Default output config: {:?}", config);
+
+        match config.sample_format() {
+            cpal::SampleFormat::I8 => self.run::<i8>(&device, &config.into()),
+            cpal::SampleFormat::I16 => self.run::<i16>(&device, &config.into()),
+            cpal::SampleFormat::I32 => self.run::<i32>(&device, &config.into()),
+            // cpal::SampleFormat::I48 => run::<I48>(&device, &config.into()),
+            cpal::SampleFormat::I64 => self.run::<i64>(&device, &config.into()),
+            cpal::SampleFormat::U8 => self.run::<u8>(&device, &config.into()),
+            cpal::SampleFormat::U16 => self.run::<u16>(&device, &config.into()),
+            // cpal::SampleFormat::U24 => run::<U24>(&device, &config.into()),
+            cpal::SampleFormat::U32 => self.run::<u32>(&device, &config.into()),
+            // cpal::SampleFormat::U48 => run::<U48>(&device, &config.into()),
+            cpal::SampleFormat::U64 => self.run::<u64>(&device, &config.into()),
+            cpal::SampleFormat::F32 => self.run::<f32>(&device, &config.into()),
+            cpal::SampleFormat::F64 => self.run::<f64>(&device, &config.into()),
+            sample_format => panic!("Unsupported sample format '{sample_format}'"),
+        }
+    }
+
+    pub fn run<T>(&mut self, device: &cpal::Device, config: &cpal::StreamConfig)
+    where
+        T: SizedSample + FromSample<f32>,
+    {
+        let sample_rate = config.sample_rate.0 as f32;
+        let channels = config.channels as usize;
+
+        // Produce a sinusoid of maximum amplitude.
+        let mut sample_clock = 0f32;
+        let mut next_value = move || {
+            sample_clock = (sample_clock + 1.0) % sample_rate;
+            (sample_clock * 440.0 * 2.0 * std::f32::consts::PI / sample_rate).sin()
+        };
+
+        let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
+
+        let stream = device.build_output_stream(
+            config,
+            move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
+                write_data(data, channels, &mut next_value)
+            },
+            err_fn,
+            None,
+        );
+        self.stream = Some(stream.unwrap());
+    }
+}
+
+fn write_data<T>(output: &mut [T], channels: usize, next_sample: &mut dyn FnMut() -> f32)
+where
+    T: Sample + FromSample<f32>,
+{
+    for frame in output.chunks_mut(channels) {
+        let value: T = T::from_sample(next_sample());
+        for sample in frame.iter_mut() {
+            *sample = value;
+        }
+    }
 }
 
 impl Frontend for MainView {
@@ -294,18 +381,36 @@ impl Frontend for MainView {
 #[derive(Default)]
 pub struct SubViews {
     textlog_view: Option<TextlogView>,
+    memory_view: Option<MemoryView>,
 }
 
 impl SubViews {
-    pub fn update(&mut self, ctx: &egui::Context) {
-        if let Some(view) = self.textlog_view.as_mut() {
-            view.update(ctx);
+    pub fn new() -> Self {
+        Self {
+            textlog_view: Default::default(),
+            memory_view: Some(MemoryView::new()),
         }
     }
 
-    pub fn draw(&mut self, ctx: &egui::Context) {
+    pub fn update(&mut self, backend: &Backend, ctx: &egui::Context) {
         if let Some(view) = self.textlog_view.as_mut() {
-            view.draw(ctx);
+            view.update(backend, ctx);
         }
+        if let Some(view) = self.memory_view.as_mut() {
+            view.update(backend, ctx);
+        }
+    }
+
+    pub fn draw(&mut self, backend: &Backend, ctx: &egui::Context) {
+        egui::SidePanel::right("subviews")
+            .exact_width(350.0)
+            .show(ctx, |ui| {
+                if let Some(view) = self.textlog_view.as_mut() {
+                    view.draw(backend, ctx, ui);
+                }
+                if let Some(view) = self.memory_view.as_mut() {
+                    view.draw(backend, ctx, ui);
+                }
+            });
     }
 }
