@@ -21,9 +21,9 @@ fn main() -> eframe::Result {
         "eframe template",
         native_options,
         Box::new(|cc| {
-            Ok(Box::new(
-                axwemulator_frontends_egui::views::main_view::MainView::new(cc),
-            ))
+            Ok(Box::new(axwemulator_frontends_egui::app::EmulatorApp::new(
+                cc,
+            )))
         }),
     )
 }
@@ -55,9 +55,9 @@ fn main() {
                 canvas,
                 web_options,
                 Box::new(|cc| {
-                    Ok(Box::new(
-                        axwemulator_frontends_egui::views::main_view::MainView::new(cc),
-                    ))
+                    Ok(Box::new(axwemulator_frontends_egui::app::EmulatorApp::new(
+                        cc,
+                    )))
                 }),
             )
             .await;

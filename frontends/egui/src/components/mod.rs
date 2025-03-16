@@ -1,1 +1,11 @@
-trait Component {}
+use emulator::EmulatorComponent;
+
+pub mod emulator;
+pub mod input;
+pub mod screen;
+pub mod selection;
+
+pub trait Component {
+    fn update(&mut self, emulator: &EmulatorComponent, ctx: &egui::Context);
+    fn draw(&mut self, emulator: &EmulatorComponent, ctx: &egui::Context, ui: &mut egui::Ui);
+}
