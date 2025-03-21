@@ -117,25 +117,25 @@ pub struct Cpu {
     state: CpuState,
     quirks: CpuQuirks,
     frame_sender: Option<FrameSender>,
-    input_reciever: Option<InputReceiver>,
+    input_receiver: Option<InputReceiver>,
 }
 
 impl Cpu {
     pub fn new(
         platform: Platform,
         frame_sender: FrameSender,
-        input_reciever: InputReceiver,
+        input_receiver: InputReceiver,
     ) -> Self {
         Self {
             state: CpuState::new(),
             quirks: platform.into(),
             frame_sender: Some(frame_sender),
-            input_reciever: Some(input_reciever),
+            input_receiver: Some(input_receiver),
         }
     }
 
     fn handle_input(&mut self) {
-        while let Some(ie) = self.input_reciever.as_ref().unwrap().pop() {
+        while let Some(ie) = self.input_receiver.as_ref().unwrap().pop() {
             self.state.keypad_state.parse_input_event(ie);
 
             if let Some(x) = self.state.waiting_for_key {

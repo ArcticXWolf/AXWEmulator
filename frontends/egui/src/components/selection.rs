@@ -4,6 +4,7 @@ use crate::app::AppCommand;
 
 use super::emulator::AvailableBackends;
 
+#[derive(Default)]
 pub struct SelectionComponent {
     emulator_backend_selection: AvailableBackends,
 }
@@ -42,14 +43,12 @@ impl SelectionComponent {
             #[cfg(target_arch = "wasm32")]
             {
                 let sender = command_sender.clone();
+                let selection = self.emulator_backend_selection.clone();
                 wasm_bindgen_futures::spawn_local(async move {
                     if let Some(handle) = rfd::AsyncFileDialog::new().pick_file().await {
                         let rom = handle.read().await;
                         sender
-                            .send(AppCommand::InitBackendWithRom(
-                                self.emulator_backend_selection,
-                                rom,
-                            ))
+                            .send(AppCommand::InitBackendWithRom(selection, rom))
                             .unwrap();
                     }
                 });

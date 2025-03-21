@@ -54,8 +54,8 @@ impl Transmutable for SimpleCpu {
 pub fn create_simple_backend<F: Frontend>(frontend: &mut F) -> Result<Backend, Error> {
     let mut backend = Backend::default();
 
-    let (text_sender, text_reciever) = build_text_channel();
-    let (frame_sender, frame_reciever) = build_frame_channel(100, 100);
+    let (text_sender, text_receiver) = build_text_channel();
+    let (frame_sender, frame_receiver) = build_frame_channel(100, 100);
 
     let cpu = SimpleCpu {
         counter: 0,
@@ -63,8 +63,8 @@ pub fn create_simple_backend<F: Frontend>(frontend: &mut F) -> Result<Backend, E
         frame_sender,
     };
     backend.add_component("cpu", Component::new(cpu));
-    frontend.register_text_reciever(text_reciever)?;
-    frontend.register_graphics_reciever(frame_reciever)?;
+    frontend.register_text_receiver(text_receiver)?;
+    frontend.register_graphics_receiver(frame_receiver)?;
 
     Ok(backend)
 }

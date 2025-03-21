@@ -1,19 +1,19 @@
 use femtos::Instant;
 
-use crate::utils::Ringbuffer;
+use crate::utils::ClockedRingbuffer;
 
 pub struct TextSender {
-    queue: Ringbuffer<String>,
+    queue: ClockedRingbuffer<String>,
 }
 
 impl TextSender {
     pub fn add(&self, clock: Instant, msg: String) {
-        self.queue.push_back(clock, msg);
+        self.queue.push_back((clock, msg));
     }
 }
 
 pub struct TextReceiver {
-    queue: Ringbuffer<String>,
+    queue: ClockedRingbuffer<String>,
 }
 
 impl TextReceiver {
@@ -30,12 +30,12 @@ impl TextReceiver {
 
 pub fn build_text_channel() -> (TextSender, TextReceiver) {
     let sender = TextSender {
-        queue: Ringbuffer::new(20),
+        queue: ClockedRingbuffer::new(20),
     };
 
-    let reciever = TextReceiver {
+    let receiver = TextReceiver {
         queue: sender.queue.clone(),
     };
 
-    (sender, reciever)
+    (sender, receiver)
 }

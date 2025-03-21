@@ -1,4 +1,4 @@
-use crate::utils::Ringbuffer;
+use crate::utils::ClockedRingbuffer;
 
 #[derive(Debug, Clone, Copy)]
 pub enum KeyboardEventKey {
@@ -55,17 +55,17 @@ pub enum InputEvent {
 }
 
 pub struct InputSender {
-    queue: Ringbuffer<InputEvent>,
+    queue: ClockedRingbuffer<InputEvent>,
 }
 
 impl InputSender {
     pub fn add(&self, input: InputEvent) {
-        self.queue.push_back(femtos::Instant::START, input);
+        self.queue.push_back((femtos::Instant::START, input));
     }
 }
 
 pub struct InputReceiver {
-    queue: Ringbuffer<InputEvent>,
+    queue: ClockedRingbuffer<InputEvent>,
 }
 
 impl InputReceiver {
@@ -83,12 +83,12 @@ impl InputReceiver {
 
 pub fn build_input_channel() -> (InputSender, InputReceiver) {
     let sender = InputSender {
-        queue: Ringbuffer::new(20),
+        queue: ClockedRingbuffer::new(20),
     };
 
-    let reciever = InputReceiver {
+    let receiver = InputReceiver {
         queue: sender.queue.clone(),
     };
 
-    (sender, reciever)
+    (sender, receiver)
 }

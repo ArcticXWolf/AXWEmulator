@@ -1,7 +1,9 @@
+mod audio;
 mod cpu;
 mod input;
 mod timer;
 
+use audio::{AUDIO_SAMPLING_RATE, Audio};
 use axwemulator_core::{
     backend::{
         Backend,
@@ -9,7 +11,10 @@ use axwemulator_core::{
         memory::MemoryBlock,
     },
     error::Error,
-    frontend::{Frontend, graphics::build_frame_channel, input::build_input_channel},
+    frontend::{
+        Frontend, audio::build_audio_channel, graphics::build_frame_channel,
+        input::build_input_channel,
+    },
 };
 use cpu::{Cpu, FRAME_DIMENSIONS};
 use timer::Timer;
@@ -55,9 +60,10 @@ pub fn create_chip8_backend<F: Frontend>(
     options: Chip8Options,
 ) -> Result<Backend, Error> {
     let mut backend = Backend::default();
-    let (frame_sender, frame_reciever) =
+    let (frame_sender, frame_receiver) =
         build_frame_channel(FRAME_DIMENSIONS.0, FRAME_DIMENSIONS.1);
-    let (input_sender, input_reciever) = build_input_channel();
+    let (input_sender, input_receiver) = build_input_channel();
+    let (audio_sender, audio_receiver) = build_audio_channel(AUDIO_SAMPLING_RATE, 5000);
 
     let mut interpreter_memory: MemoryBlock = vec![].into();
     interpreter_memory.resize(0x200);
@@ -71,10 +77,14 @@ pub fn create_chip8_backend<F: Frontend>(
     let timer = Timer::new();
     backend.add_component("timer", Component::new(timer));
 
-    let cpu = Cpu::new(options.platform, frame_sender, input_reciever);
+    let cpu = Cpu::new(options.platform, frame_sender, input_receiver);
     backend.add_component("cpu", Component::new(cpu));
     frontend.register_input_sender(input_sender)?;
-    frontend.register_graphics_reciever(frame_reciever)?;
+    frontend.register_graphics_receiver(frame_receiver)?;
+
+    let audio = Audio::new(audio_sender);
+    backend.add_component("audio", Component::new(audio));
+    frontend.register_audio_receiver(audio_receiver)?;
 
     Ok(backend)
 }

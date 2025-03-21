@@ -1,6 +1,6 @@
 use femtos::Instant;
 
-use crate::utils::Ringbuffer;
+use crate::utils::ClockedRingbuffer;
 
 pub type Pixel = (u8, u8, u8, u8);
 
@@ -36,18 +36,18 @@ impl Frame {
 }
 
 pub struct FrameSender {
-    queue: Ringbuffer<Frame>,
+    queue: ClockedRingbuffer<Frame>,
 }
 
 impl FrameSender {
     pub fn add(&self, clock: Instant, frame: Frame) {
-        self.queue.push_back(clock, frame);
+        self.queue.push_back((clock, frame));
     }
 }
 
 pub struct FrameReceiver {
     max_size: (usize, usize),
-    queue: Ringbuffer<Frame>,
+    queue: ClockedRingbuffer<Frame>,
 }
 
 impl FrameReceiver {
@@ -62,13 +62,13 @@ impl FrameReceiver {
 
 pub fn build_frame_channel(width: usize, height: usize) -> (FrameSender, FrameReceiver) {
     let sender = FrameSender {
-        queue: Ringbuffer::new(20),
+        queue: ClockedRingbuffer::new(20),
     };
 
-    let reciever = FrameReceiver {
+    let receiver = FrameReceiver {
         max_size: (width, height),
         queue: sender.queue.clone(),
     };
 
-    (sender, reciever)
+    (sender, receiver)
 }

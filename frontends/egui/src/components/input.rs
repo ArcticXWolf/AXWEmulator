@@ -1,7 +1,9 @@
-use axwemulator_core::frontend::input::{ButtonState, InputEvent, InputSender};
-use egui::Event;
+use std::sync::mpsc;
 
-use crate::utils;
+use axwemulator_core::frontend::input::{ButtonState, InputEvent, InputSender};
+use egui::{Event, Key};
+
+use crate::{app::AppCommand, utils};
 
 use super::Component;
 
@@ -16,7 +18,12 @@ impl InputComponent {
 }
 
 impl Component for InputComponent {
-    fn update(&mut self, _emulator: &super::emulator::EmulatorComponent, ctx: &egui::Context) {
+    fn update(
+        &mut self,
+        _emulator: &super::emulator::EmulatorComponent,
+        command_sender: &mpsc::Sender<AppCommand>,
+        ctx: &egui::Context,
+    ) {
         ctx.input(|i| {
             for event in i.raw.events.iter() {
                 if let Event::Key {
@@ -37,6 +44,9 @@ impl Component for InputComponent {
                     };
                     if let Some(key) = utils::translate_egui_key_to_frontend_key(*key) {
                         self.input_sender.add(InputEvent::Keyboard(key, state));
+                    }
+                    if *key == Key::Escape {
+                        command_sender.send(AppCommand::QuitBackend).unwrap();
                     }
                 }
             }
