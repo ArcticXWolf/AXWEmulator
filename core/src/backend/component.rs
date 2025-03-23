@@ -47,11 +47,18 @@ pub trait Steppable {
     fn step(&mut self, backend: &Backend) -> Result<Duration, Error>;
 }
 
+pub trait Inspectable {
+    fn inspect(&self) -> Vec<String>;
+}
+
 pub trait Transmutable {
     fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
         None
     }
     fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
+        None
+    }
+    fn as_inspectable(&mut self) -> Option<&mut dyn Inspectable> {
         None
     }
 }

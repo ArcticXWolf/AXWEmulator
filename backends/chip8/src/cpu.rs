@@ -3,7 +3,7 @@ use std::fmt::Display;
 use axwemulator_core::{
     backend::{
         Backend,
-        component::{Addressable, MemoryAddress, Steppable, Transmutable},
+        component::{Addressable, Inspectable, MemoryAddress, Steppable, Transmutable},
     },
     error::Error,
     frontend::{
@@ -189,17 +189,6 @@ impl Steppable for Cpu {
             // decode
             let instruction = Instruction::from(opcode);
 
-            // poor mans debugger
-            // println!(
-            //     "Before {:#010x}: {:25} {}",
-            //     self.state.pc - 2,
-            //     instruction.to_string(),
-            //     self.state
-            // );
-            // if self.state.pc - 2 == 0x392 {
-            //     panic!();
-            // }
-
             // execute
             instruction.execute(self, backend)?;
         }
@@ -219,8 +208,24 @@ impl Steppable for Cpu {
     }
 }
 
+impl Inspectable for Cpu {
+    fn inspect(&self) -> Vec<String> {
+        vec![
+            format!("PC: {}", self.state.pc),
+            format!("SP: {}", self.state.sp),
+            format!("I: {}", self.state.i),
+            format!("V: {:?}", self.state.v),
+            format!("Stack: {:?}", self.state.stack),
+        ]
+    }
+}
+
 impl Transmutable for Cpu {
     fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
+        Some(self)
+    }
+
+    fn as_inspectable(&mut self) -> Option<&mut dyn Inspectable> {
         Some(self)
     }
 }

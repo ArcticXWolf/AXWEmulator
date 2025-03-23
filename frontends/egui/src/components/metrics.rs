@@ -1,17 +1,105 @@
-use std::sync::mpsc;
+use std::{collections::HashMap, fmt::Display, sync::mpsc};
 
-use web_time::Duration;
+use axwemulator_core::utils::Ringbuffer;
+use web_time::{Duration, Instant};
 
 use crate::app::AppCommand;
 
 use super::Component;
 
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum MeasurementType {
+    Frametime,
+    FullFrametime,
+    EmulatorFrametime,
+}
+
+impl Display for MeasurementType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MeasurementType::Frametime => write!(f, "Frametime"),
+            MeasurementType::FullFrametime => write!(f, "FullFrametime"),
+            MeasurementType::EmulatorFrametime => write!(f, "Emulator"),
+        }
+    }
+}
+
+pub struct Measurement {
+    current_start: Instant,
+    history: Ringbuffer<Duration>,
+}
+
+impl Measurement {
+    pub fn new() -> Self {
+        Self {
+            current_start: Instant::now(),
+            history: Ringbuffer::new(200),
+        }
+    }
+
+    pub fn start_measurement(&mut self) {
+        self.current_start = Instant::now();
+    }
+
+    pub fn stop_measurement(&mut self) {
+        self.history.push_back(self.current_start.elapsed());
+    }
+
+    pub fn average(&self) -> Duration {
+        self.history.peek_range(..).iter().sum::<Duration>() / self.history.len() as u32
+    }
+
+    pub fn min(&self) -> Duration {
+        self.history
+            .peek_range(..)
+            .into_iter()
+            .min()
+            .unwrap_or_default()
+    }
+
+    pub fn max(&self) -> Duration {
+        self.history
+            .peek_range(..)
+            .into_iter()
+            .max()
+            .unwrap_or_default()
+    }
+}
+
+impl Default for Measurement {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Default)]
-pub struct MetricsComponent {}
+pub struct MetricsComponent {
+    measurements: HashMap<MeasurementType, Measurement>,
+}
 
 impl MetricsComponent {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            measurements: HashMap::new(),
+        }
+    }
+
+    pub fn get_measurement(&self, measurement_type: MeasurementType) -> &Measurement {
+        &self.measurements[&measurement_type]
+    }
+
+    pub fn start(&mut self, measurement_type: MeasurementType) {
+        self.measurements
+            .entry(measurement_type)
+            .or_default()
+            .start_measurement();
+    }
+
+    pub fn stop(&mut self, measurement_type: MeasurementType) {
+        self.measurements
+            .entry(measurement_type)
+            .or_default()
+            .stop_measurement();
     }
 }
 
@@ -26,31 +114,18 @@ impl Component for MetricsComponent {
 
     fn draw(
         &mut self,
-        emulator: &super::emulator::EmulatorComponent,
+        _emulator: &super::emulator::EmulatorComponent,
         _ctx: &egui::Context,
         ui: &mut egui::Ui,
     ) {
-        let frametimes = emulator.get_frametimes().peek_range(..);
-        let avg_total = frametimes
-            .iter()
-            .map(|f| f.total_frametime)
-            .sum::<Duration>()
-            / frametimes.len() as u32;
-        let avg_total_fps = Duration::from_secs(1).as_secs_f64() / avg_total.as_secs_f64();
-        let avg_backend = frametimes
-            .iter()
-            .map(|f| f.emulator_update_frametime)
-            .sum::<Duration>()
-            / frametimes.len() as u32;
-
-        ui.label(format!(
-            "Average Total Frametime: {:06.3}ms ({:.1} FPS)",
-            avg_total.as_secs_f64() * 1000.0,
-            avg_total_fps
-        ));
-        ui.label(format!(
-            "Average Backend Frametime: {:06.3}ms",
-            avg_backend.as_secs_f64() * 1000.0
-        ));
+        for (measurement_type, measurement) in &self.measurements {
+            ui.label(format!(
+                "{:<20}: {:04.2}ms | {:04.2}ms | {:04.2}ms",
+                measurement_type,
+                measurement.min().as_secs_f32() * 1000.0,
+                measurement.average().as_secs_f32() * 1000.0,
+                measurement.max().as_secs_f32() * 1000.0
+            ));
+        }
     }
 }

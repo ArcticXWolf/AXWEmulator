@@ -7,6 +7,7 @@ use crate::app::AppCommand;
 pub mod audio;
 pub mod emulator;
 pub mod input;
+pub mod inspector;
 pub mod metrics;
 pub mod screen;
 pub mod selection;

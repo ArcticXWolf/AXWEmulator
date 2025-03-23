@@ -36,11 +36,18 @@ impl Backend {
         self.bus.borrow_mut()
     }
 
-    pub fn get_device(&self, name: &str) -> Result<Component, Error> {
+    pub fn get_component(&self, name: &str) -> Result<Component, Error> {
         self.components
             .get(name)
             .cloned()
             .ok_or_else(|| Error::new(format!("no component named {}", name)))
+    }
+
+    pub fn get_all_components(&self) -> Vec<(String, Component)> {
+        self.components
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect::<Vec<(String, Component)>>()
     }
 
     pub fn get_current_clock(&self) -> Instant {
