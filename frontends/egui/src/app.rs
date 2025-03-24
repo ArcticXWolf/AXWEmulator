@@ -8,6 +8,7 @@ use crate::components::{
     emulator::{AvailableBackends, EmulatorComponent},
     input::InputComponent,
     inspector::InspectorComponent,
+    memory::MemoryComponent,
     metrics::{MeasurementType, MetricsComponent},
     screen::ScreenComponent,
     selection::SelectionComponent,
@@ -23,6 +24,7 @@ pub enum AppCommand {
 pub enum SidepanelContent {
     Metrics,
     Inspector,
+    Memory,
 }
 
 pub struct EmulatorApp {
@@ -36,6 +38,7 @@ pub struct EmulatorApp {
     audio: Option<AudioComponent>,
     metrics: Option<MetricsComponent>,
     inspector: Option<InspectorComponent>,
+    memory: Option<MemoryComponent>,
 }
 
 impl eframe::App for EmulatorApp {
@@ -69,6 +72,7 @@ impl EmulatorApp {
             audio: None,
             metrics: None,
             inspector: None,
+            memory: None,
         }
     }
 
@@ -83,6 +87,7 @@ impl EmulatorApp {
                     ));
                     self.metrics = Some(MetricsComponent::new());
                     self.inspector = Some(InspectorComponent::new());
+                    self.memory = Some(MemoryComponent::new());
                 }
                 AppCommand::QuitBackend => {
                     self.selection = SelectionComponent::new();
@@ -126,6 +131,10 @@ impl EmulatorApp {
             if let Some(inspector) = self.inspector.as_mut() {
                 inspector.update(emulator, &self.app_command_sender, ctx);
             }
+
+            if let Some(memory) = self.memory.as_mut() {
+                memory.update(emulator, &self.app_command_sender, ctx);
+            }
         } else {
             self.selection.update(&self.app_command_sender, ctx);
         }
@@ -149,6 +158,11 @@ impl EmulatorApp {
                                 SidepanelContent::Inspector,
                                 "Inspector",
                             );
+                            ui.selectable_value(
+                                &mut self.sidepanel_selection,
+                                SidepanelContent::Memory,
+                                "Memory",
+                            );
                         });
                     ui.separator();
 
@@ -161,6 +175,11 @@ impl EmulatorApp {
                         SidepanelContent::Inspector => {
                             if let Some(inspector) = self.inspector.as_mut() {
                                 inspector.draw(emulator, ctx, ui);
+                            }
+                        }
+                        SidepanelContent::Memory => {
+                            if let Some(memory) = self.memory.as_mut() {
+                                memory.draw(emulator, ctx, ui);
                             }
                         }
                     }

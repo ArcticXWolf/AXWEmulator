@@ -210,13 +210,17 @@ impl Steppable for Cpu {
 
 impl Inspectable for Cpu {
     fn inspect(&self) -> Vec<String> {
-        vec![
-            format!("PC: {}", self.state.pc),
-            format!("SP: {}", self.state.sp),
-            format!("I: {}", self.state.i),
-            format!("V: {:?}", self.state.v),
-            format!("Stack: {:?}", self.state.stack),
-        ]
+        let mut result = vec![];
+        result.push(format!("{:>6}: {}", "PC", self.state.pc));
+        result.push(format!("{:>6}: {}", "SP", self.state.sp));
+        result.push(format!("{:>6}: {}", "I", self.state.i));
+        for (i, r) in self.state.v.iter().enumerate() {
+            result.push(format!("{:>6}: {}", format!("v[{}]", i), r));
+        }
+        for (i, r) in self.state.stack.iter().enumerate() {
+            result.push(format!("{:>6}: {}", format!("s[{}]", i), r));
+        }
+        result
     }
 }
 

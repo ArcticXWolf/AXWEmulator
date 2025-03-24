@@ -1,25 +1,26 @@
-use std::{collections::HashMap, fmt::Display, sync::mpsc};
+use std::{collections::BTreeMap, fmt::Display, sync::mpsc};
 
 use axwemulator_core::utils::Ringbuffer;
+use egui::RichText;
 use web_time::{Duration, Instant};
 
 use crate::app::AppCommand;
 
 use super::Component;
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MeasurementType {
-    Frametime,
     FullFrametime,
+    Frametime,
     EmulatorFrametime,
 }
 
 impl Display for MeasurementType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MeasurementType::Frametime => write!(f, "Frametime"),
-            MeasurementType::FullFrametime => write!(f, "FullFrametime"),
-            MeasurementType::EmulatorFrametime => write!(f, "Emulator"),
+            MeasurementType::Frametime => write!(f, "{:>13}", "Frametime"),
+            MeasurementType::FullFrametime => write!(f, "{:>13}", "FullFrametime"),
+            MeasurementType::EmulatorFrametime => write!(f, "{:>13}", "Emulator"),
         }
     }
 }
@@ -74,13 +75,13 @@ impl Default for Measurement {
 
 #[derive(Default)]
 pub struct MetricsComponent {
-    measurements: HashMap<MeasurementType, Measurement>,
+    measurements: BTreeMap<MeasurementType, Measurement>,
 }
 
 impl MetricsComponent {
     pub fn new() -> Self {
         Self {
-            measurements: HashMap::new(),
+            measurements: BTreeMap::new(),
         }
     }
 
@@ -119,13 +120,16 @@ impl Component for MetricsComponent {
         ui: &mut egui::Ui,
     ) {
         for (measurement_type, measurement) in &self.measurements {
-            ui.label(format!(
-                "{:<20}: {:04.2}ms | {:04.2}ms | {:04.2}ms",
-                measurement_type,
-                measurement.min().as_secs_f32() * 1000.0,
-                measurement.average().as_secs_f32() * 1000.0,
-                measurement.max().as_secs_f32() * 1000.0
-            ));
+            ui.label(
+                RichText::new(format!(
+                    "{}: {:04.2}ms | {:04.2}ms | {:04.2}ms",
+                    measurement_type,
+                    measurement.min().as_secs_f32() * 1000.0,
+                    measurement.average().as_secs_f32() * 1000.0,
+                    measurement.max().as_secs_f32() * 1000.0
+                ))
+                .monospace(),
+            );
         }
     }
 }

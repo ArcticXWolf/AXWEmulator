@@ -8,6 +8,7 @@ pub mod audio;
 pub mod emulator;
 pub mod input;
 pub mod inspector;
+pub mod memory;
 pub mod metrics;
 pub mod screen;
 pub mod selection;

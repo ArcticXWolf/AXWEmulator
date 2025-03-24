@@ -1,5 +1,7 @@
 use std::sync::mpsc;
 
+use egui::RichText;
+
 use crate::app::AppCommand;
 
 use super::Component;
@@ -33,7 +35,7 @@ impl Component for InspectorComponent {
         ui: &mut egui::Ui,
     ) {
         egui::ComboBox::from_label("Inspector")
-            .selected_text(format!("{:?}", self.selected_component))
+            .selected_text(self.selected_component.to_string())
             .show_ui(ui, |ui| {
                 for (name, component) in emulator.get_backend().get_all_components() {
                     if component.borrow_mut().as_inspectable().is_some() {
@@ -49,7 +51,7 @@ impl Component for InspectorComponent {
             if let Some(inspectable) = component.borrow_mut().as_inspectable() {
                 let lines = inspectable.inspect();
                 for line in lines {
-                    ui.label(line);
+                    ui.label(RichText::new(line).monospace());
                 }
             }
         }
